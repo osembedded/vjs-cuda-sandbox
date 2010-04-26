@@ -3,6 +3,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdbool.h>
+#include <string.h>
 
 typedef double FLOAT;
 //typedef float FLOAT;
@@ -56,6 +58,10 @@ UINT8 *convB;
 FLOAT PSF[9] = {-K/8.0, -K/8.0, -K/8.0, -K/8.0, K+1.0, -K/8.0, -K/8.0, -K/8.0, -K/8.0};
 UINT64 microsecs=0, clksPerMicro=0, millisecs=0;
 
+/* User specified */
+static char infile_pattern[128];
+static char outfile_pattern[128];
+
 void print_time_info (void)
 {
    cycleCnt = cyclesElapsed(stopTSC, startTSC);
@@ -66,15 +72,95 @@ void print_time_info (void)
            cycleCnt, clksPerMicro, millisecs);
 }
 
+void read_ppm_header (int fd, int header_len)
+{
+   int bytesRead = 0;
+   int bytesLeft = 0;
+   
+   if( -1 == fd )
+   {
+      printf("Invalid File pointer passed in! Exiting!\n");
+      exit (-1);
+   }
+
+   bytesLeft = header_len;
+
+   do
+   {
+      //printf("bytesRead=%d, bytesLeft=%d\n", bytesRead, bytesLeft);
+      bytesRead=read(fd, (void *)header, bytesLeft);
+      bytesLeft -= bytesRead;
+   } while(bytesLeft > 0);
+   
+   header[header_len]='\0';
+   
+//    printf("header = %s\n", header);
+}
+
+void write_output_to_file(int fdout, int num_pixels, int header_len)
+{
+   int ii = 0;
+
+   if( -1 == fdout )
+   {
+      printf("Invalid File pointer passed in! Exiting!\n");
+      exit (-1);
+   }
+
+   write(fdout, (void *)header, header_len);
+   
+   // Write modified pixels back to file.
+   for(ii=0; ii<num_pixels; ii++)
+   {
+      UINT8 rgb[3];
+      rgb[0] = convR[ii];
+      rgb[1] = convG[ii];
+      rgb[2] = convB[ii];
+      
+      write(fdout, (void *)&rgb[0], 3);
+   }
+}
+
+bool open_files(int num, int* fdin, int* fdout)
+{
+   char infile[256], outfile[256];
+
+   if(NULL == fdin ||
+      NULL == fdout)
+   {
+      printf("Null parameters passed in in open_files!\n");
+      return false;
+   }
+
+   snprintf((char *)&infile[0], 256, infile_pattern, num);
+   snprintf((char *)&outfile[0], 256, outfile_pattern, num);
+   
+   if((*fdin = open((const char*)&infile[0], O_RDONLY, 0644)) < 0)
+   {
+      printf("Error opening %s\n", infile);
+      return false;
+   }
+   
+   if((*fdout = open((const char*)&outfile[0], (O_RDWR | O_CREAT), 0666)) < 0)
+   {
+      printf("Error opening %s\n", outfile);
+      return false;
+   }
+
+   return true;
+}
+
 int main(int argc, char *argv[])
 {
-    int fdin, fdout, bytesRead=0, bytesLeft, i;
+    int fdin, fdout, i;
     FLOAT clkRate;
     int height = 0;
     int width = 0;
     int num_pixels = 0;
-
     int header_len = 0;
+    int seq_start_num = 0;
+    int seq_count = 0;
+    int jj = 0;
 
     // Estimate CPU clock rate
     startTSC = readTSC();
@@ -89,9 +175,9 @@ int main(int argc, char *argv[])
           cycleCnt);
     printf(" %7.1f Mhz\n", clkRate);
     
-    if(argc != 6)
+    if(argc != 8)
     {
-       printf("Usage: nored <file.ppm> <width> <height> <header_len> <outfile.ppm>\n");
+       printf("Usage: blacknwhite <infile%%d.ppm> <width> <height> <header_len> <outfile%%d.ppm> <seq_start_num> <count>\n");
        exit(-1);
     }
     else
@@ -99,9 +185,12 @@ int main(int argc, char *argv[])
        width = atoi(argv[2]);
        height = atoi(argv[3]);
        header_len = atoi(argv[4]);
+       seq_start_num = atoi(argv[6]);
+       seq_count = atoi(argv[7]);
+
        num_pixels = width * height;
 
-       printf("Using params: infile: %s, outfile: %s, height: %d, width: %d, header_len: %d\n", argv[1], argv[5], height, width, header_len);
+       printf("Using params: infile pattern: %s, outfile pattern: %s, \nheight: %d, width: %d, header_len: %d, seq_start: %d, seq_count: %d\n", argv[1], argv[5], height, width, header_len, seq_start_num, seq_count);
 
        // Allocate memory for holding the pixels...
        header = malloc(header_len);
@@ -124,74 +213,50 @@ int main(int argc, char *argv[])
           exit(-1);
        }
 
-       if((fdin = open(argv[1], O_RDONLY, 0644)) < 0)
+       strncpy(infile_pattern, argv[1], sizeof(infile_pattern));
+       strncpy(outfile_pattern, argv[5], sizeof(outfile_pattern));
+    }
+
+    for(jj=seq_start_num; jj<(seq_start_num + seq_count); jj++)
+    {
+       if( false == open_files(jj, &fdin, &fdout))
        {
-          printf("Error opening %s\n", argv[1]);
-          exit(-1);
+          printf("open files failed! bailing out!\n");
+          break;
+       }
+
+       read_ppm_header(fdin, header_len);
+       
+/***************** Start of  core computation **************/
+       startTSC = readTSC();
+       
+       // Read RGB data
+       for(i=0; i<num_pixels; i++)
+       {
+          read(fdin, (void *)&R[i], 1); 
+          read(fdin, (void *)&G[i], 1);
+          read(fdin, (void *)&B[i], 1);
+          convR[i]=(11*R[i] + 16*G[i] + 5*B[i])/32;
+          convG[i]=convR[i];
+          convB[i]=convR[i];
        }
        
-       if((fdout = open(argv[5], (O_RDWR | O_CREAT), 0666)) < 0)
-       {
-          printf("Error opening %s\n", argv[1]);
-          exit(-1);
-       }
-    }
-    
-    bytesLeft = header_len;
-
-    do
-    {
-        //printf("bytesRead=%d, bytesLeft=%d\n", bytesRead, bytesLeft);
-        bytesRead=read(fdin, (void *)header, bytesLeft);
-        bytesLeft -= bytesRead;
-    } while(bytesLeft > 0);
-
-    header[header_len]='\0';
-
-//    printf("header = %s\n", header);
-
-/***************** Start of  core computation **************/
-    // Start of convolution time stamp
-    startTSC = readTSC();
-
-    // Read RGB data
-    for(i=0; i<num_pixels; i++)
-    {
-       read(fdin, (void *)&R[i], 1); 
-       read(fdin, (void *)&G[i], 1);
-       read(fdin, (void *)&B[i], 1);
-       convR[i]=(11*R[i] + 16*G[i] + 5*B[i])/32;
-       convG[i]=convR[i];
-       convB[i]=convR[i];
-    }
-
-    // End of convolution time stamp
-    stopTSC = readTSC();
+       stopTSC = readTSC();
+       print_time_info();
 /***************** End of core computation **************/
 
-    print_time_info();
+       startTSC = readTSC();
+       
+       write_output_to_file(fdout, num_pixels, header_len);
+       
+       stopTSC = readTSC();
+       print_time_info();
+       
+       close(fdin);
+       close(fdout);
+    } // End of for loop.
 
-    write(fdout, (void *)header, header_len);
-
-    startTSC = readTSC();
-
-    // Write RGB data
-    for(i=0; i<num_pixels; i++)
-    {
-       UINT8 rgb[3];
-       rgb[0] = convR[i];
-       rgb[1] = convG[i];
-       rgb[2] = convB[i];
-
-       write(fdout, (void *)&rgb[0], 3);
-    }
-    stopTSC = readTSC();
-    print_time_info();
-    
     FREE_ALL_MEM;
-
-    close(fdin);
-    close(fdout);
-
+    
     return 0;
 }
