@@ -110,14 +110,47 @@ void write_output_to_file(int fdout, int num_pixels, int header_len)
    write(fdout, (void *)header, header_len);
    
    // Write modified pixels back to file.
-   for(ii=0; ii<num_pixels; ii++)
+   for(ii=0; ii<num_pixels; ii = ii + 9)
    {
-      UINT8 rgb[3];
+      UINT8 rgb[27];
       rgb[0] = convR[ii];
       rgb[1] = convG[ii];
       rgb[2] = convB[ii];
+
+      rgb[3] = convR[ii+1];
+      rgb[4] = convG[ii+1];
+      rgb[5] = convB[ii+1];
+
+      rgb[6] = convR[ii+2];
+      rgb[7] = convG[ii+2];
+      rgb[8] = convB[ii+2];
       
-      write(fdout, (void *)&rgb[0], 3);
+      rgb[9] = convR[ii+3];
+      rgb[10] = convG[ii+3];
+      rgb[11] = convB[ii+3];
+
+      rgb[12] = convR[ii+4];
+      rgb[13] = convG[ii+4];
+      rgb[14] = convB[ii+4];
+
+      rgb[15] = convR[ii+5];
+      rgb[16] = convG[ii+5];
+      rgb[17] = convB[ii+5];
+
+      rgb[18] = convR[ii+6];
+      rgb[19] = convG[ii+6];
+      rgb[20] = convB[ii+6];
+
+      rgb[21] = convR[ii+7];
+      rgb[22] = convG[ii+7];
+      rgb[23] = convB[ii+7];
+
+      rgb[24] = convR[ii+8];
+      rgb[25] = convG[ii+8];
+      rgb[26] = convB[ii+8];
+
+
+      write(fdout, (void *)&rgb[0], 27);
    }
 }
 
