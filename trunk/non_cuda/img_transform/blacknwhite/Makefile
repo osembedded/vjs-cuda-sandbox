@@ -1,4 +1,4 @@
-CPPFLAGS = -O0 -g
+CPPFLAGS = -O0 -g -Wall -Werror
 
 .PHONY: clean imgclean
 
