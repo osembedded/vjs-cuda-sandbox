@@ -173,14 +173,21 @@ int main(int argc, char *argv[])
 
     write(fdout, (void *)header, header_len);
 
+    startTSC = readTSC();
+
     // Write RGB data
     for(i=0; i<num_pixels; i++)
     {
-        write(fdout, (void *)&convR[i], 1);
-        write(fdout, (void *)&convG[i], 1);
-        write(fdout, (void *)&convB[i], 1);
-    }
+       UINT8 rgb[3];
+       rgb[0] = convR[i];
+       rgb[1] = convG[i];
+       rgb[2] = convB[i];
 
+       write(fdout, (void *)&rgb[0], 3);
+    }
+    stopTSC = readTSC();
+    print_time_info();
+    
     FREE_ALL_MEM;
 
     close(fdin);
