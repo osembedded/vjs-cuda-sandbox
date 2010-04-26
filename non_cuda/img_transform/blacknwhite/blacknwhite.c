@@ -4,19 +4,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#ifdef IPP
-#include <ipp.h>
-#include <ippdefs.h>
-#endif
-
 typedef double FLOAT;
 //typedef float FLOAT;
 
-// Cycle Counter Code
-//
-// Can be replaced with ippGetCpuFreqMhz and ippGetCpuClocks
-// when IPP core functions are available.
-//
 typedef unsigned int UINT32;
 typedef unsigned long long int UINT64;
 typedef unsigned char UINT8;
@@ -45,60 +35,10 @@ UINT64 readTSC(void)
    return ts;
 }
 
-
 UINT64 cyclesElapsed(UINT64 stopTS, UINT64 startTS)
 {
    return (stopTS - startTS);
 }
-						    
-#ifdef IPP
-void printCpuType(IppCpuType cpuType)
-{
-    if(cpuType==0) {printf("ippCpuUnknown 0x00\n"); return;}
-    if(cpuType==0x01) {printf("ippCpuPP 0x01 Intel Pentium processor\n");return;}
-    if(cpuType==0x02) {printf("ippCpuPMX 0x02 Pentium processor with MMX technology\n");return;}
-    if(cpuType==0x03) {printf("ippCpuPPR 0x03 Pentium Pro processor\n");return;}
-    if(cpuType==0x04) {printf("ippCpuPII 0x04 Pentium II processor\n");return;}
-    if(cpuType==0x05) {printf("ippCpuPIII 0x05 Pentium III processor and Pentium III Xeon processor\n");return;}
-    if(cpuType==0x06) {printf("ippCpuP4 0x06 Pentium 4 processor and Intel Xeon processor\n");return;}
-    if(cpuType==0x07) {printf("ippCpuP4HT 0x07 Pentium 4 Processor with HT Technology\n");return;}
-    if(cpuType==0x08) {printf("ippCpuP4HT2 0x08 Pentium 4 processor with Streaming SIMD Extensions 3\n");return;}
-    if(cpuType==0x09) {printf("ippCpuCentrino 0x09 Intel Centrino mobile technology\n");return;}
-    if(cpuType==0x0a) {printf("ippCpuCoreSolo 0x0a Intel Core Solo processor\n");return;}
-    if(cpuType==0x0b) {printf("ippCpuCoreDuo 0x0b Intel Core Duo processor\n");return;}
-    if(cpuType==0x10) {printf("ippCpuITP 0x10 Intel Itanium processor\n");return;}
-    if(cpuType==0x11) {printf("ippCpuITP2 0x11 Intel Itanium 2 processor\n");return;}
-    if(cpuType==0x20) {printf("ippCpuEM64T 0x20 Intel 64 Instruction Set Architecture\n");return;}
-    if(cpuType==0x21) {printf("ippCpuC2D 0x21 Intel Core 2 Duo processor\n");return;}
-    if(cpuType==0x22) {printf("ippCpuC2Q 0x22 Intel Core 2 Quad processor\n");return;}
-    if(cpuType==0x23) {printf("ippCpuPenryn 0x23 Intel Core 2 processor with Intel SSE4.1\n");return;}
-    if(cpuType==0x24) {printf("ippCpuBonnell 0x24 Intel Atom processor\n");return;}
-    if(cpuType==0x25) {printf("ippCpuNehalem 0x25\n"); return;}
-    if(cpuType==0x26) {printf("ippCpuNext 0x26\n"); return;}
-    if(cpuType==0x40) {printf("ippCpuSSE 0x40 Processor supports Streaming SIMD Extensions instruction set\n");return;}
-    if(cpuType==0x41) {printf("ippCpuSSE2 0x41 Processor supports Streaming SIMD Extensions 2 instruction set\n");return;}
-    if(cpuType==0x42) {printf("ippCpuSSE3 0x42 Processor supports Streaming SIMD Extensions 3 instruction set\n");return;}
-    if(cpuType==0x43) {printf("ippCpuSSSE3 0x43 Processor supports Supplemental Streaming SIMD Extension 3 instruction set\n");return;}
-    if(cpuType==0x44) {printf("ippCpuSSE41 0x44 Processor supports Streaming SIMD Extensions 4.1 instruction set\n");return;}
-    if(cpuType==0x45) {printf("ippCpuSSE42 0x45 Processor supports Streaming SIMD Extensions 4.2 instruction set\n");return;}
-    if(cpuType==0x60) {printf("ippCpuX8664 0x60 Processor supports 64 bit extension\n");return;}
-    else printf("CPU UNKNOWN\n");
-    return;
-}
-
-void printCpuCapability(pStatus)
-{
-printf("pStatus=%d\n",(UINT32)pStatus);
-if((UINT32)pStatus & ippCPUID_MMX) printf("Intel Architecture MMX technology supported\n");
-if((UINT32)pStatus & ippCPUID_SSE) printf("Streaming SIMD Extensions\n");
-if((UINT32)pStatus & ippCPUID_SSE2) printf("Streaming SIMD Extensions 2\n");
-if((UINT32)pStatus & ippCPUID_SSE3) printf("Streaming SIMD Extensions 3\n");
-if((UINT32)pStatus & ippCPUID_SSSE3) printf("Supplemental Streaming SIMD Extensions 3\n");
-if((UINT32)pStatus & ippCPUID_MOVBE) printf("The processor supports MOVBE instruction\n");
-if((UINT32)pStatus & ippCPUID_SSE41) printf("Streaming SIMD Extensions 4.1\n");
-if((UINT32)pStatus & ippCPUID_SSE42) printf("Streaming SIMD Extensions 4.2\n");
-}
-#endif
 
 // PPM Edge Enhancement Code
 UINT8 *header;
@@ -114,32 +54,28 @@ UINT8 *convB;
 #define K 4.0
 
 FLOAT PSF[9] = {-K/8.0, -K/8.0, -K/8.0, -K/8.0, K+1.0, -K/8.0, -K/8.0, -K/8.0, -K/8.0};
+UINT64 microsecs=0, clksPerMicro=0, millisecs=0;
+
+void print_time_info (void)
+{
+   cycleCnt = cyclesElapsed(stopTSC, startTSC);
+   microsecs = cycleCnt/clksPerMicro;
+   millisecs = microsecs/1000;
+   
+   printf("Convolution time in cycles=%llu, rate=%llu, about %llu millisecs\n",
+           cycleCnt, clksPerMicro, millisecs);
+}
 
 int main(int argc, char *argv[])
 {
-    int fdin, fdout, bytesRead=0, bytesLeft, i, j;
-    UINT64 microsecs=0, clksPerMicro=0, millisecs=0;
-    FLOAT temp, clkRate;
-
+    int fdin, fdout, bytesRead=0, bytesLeft, i;
+    FLOAT clkRate;
     int height = 0;
     int width = 0;
     int num_pixels = 0;
 
     int header_len = 0;
 
-#ifdef IPP
-    IppCpuType cpuType;
-    IppStatus pStatus;
-    Ipp64u pFeatureMask;
-    Ipp32u pCpuidInfoRegs[4];
-
-    cpuType=ippGetCpuType();
-    pStatus=ippGetCpuFeatures(&pFeatureMask, pCpuidInfoRegs);
-
-    printCpuType(cpuType);
-    printCpuCapability(pStatus);
-#endif
-    
     // Estimate CPU clock rate
     startTSC = readTSC();
     usleep(1000000);
@@ -153,8 +89,6 @@ int main(int argc, char *argv[])
           cycleCnt);
     printf(" %7.1f Mhz\n", clkRate);
     
-    //printf("argc = %d\n", argc);
-
     if(argc != 6)
     {
        printf("Usage: nored <file.ppm> <width> <height> <header_len> <outfile.ppm>\n");
@@ -214,7 +148,11 @@ int main(int argc, char *argv[])
 
     header[header_len]='\0';
 
-    printf("header = %s\n", header);
+//    printf("header = %s\n", header);
+
+/***************** Start of  core computation **************/
+    // Start of convolution time stamp
+    startTSC = readTSC();
 
     // Read RGB data
     for(i=0; i<num_pixels; i++)
@@ -227,19 +165,13 @@ int main(int argc, char *argv[])
        convB[i]=convR[i];
     }
 
-    // Start of convolution time stamp
-    startTSC = readTSC();
-
     // End of convolution time stamp
     stopTSC = readTSC();
-    cycleCnt = cyclesElapsed(stopTSC, startTSC);
-    microsecs = cycleCnt/clksPerMicro;
-    millisecs = microsecs/1000;
+/***************** End of core computation **************/
 
-    printf("Convolution time in cycles=%llu, rate=%llu, about %llu millisecs\n",
-	    cycleCnt, clksPerMicro, millisecs);
+    print_time_info();
 
-    write(fdout, (void *)header, 21);
+    write(fdout, (void *)header, header_len);
 
     // Write RGB data
     for(i=0; i<num_pixels; i++)
@@ -249,10 +181,10 @@ int main(int argc, char *argv[])
         write(fdout, (void *)&convB[i], 1);
     }
 
-
     FREE_ALL_MEM;
 
     close(fdin);
     close(fdout);
- 
+
+    return 0;
 }
