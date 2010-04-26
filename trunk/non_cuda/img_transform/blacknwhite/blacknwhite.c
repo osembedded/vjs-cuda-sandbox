@@ -219,66 +219,17 @@ int main(int argc, char *argv[])
     // Read RGB data
     for(i=0; i<num_pixels; i++)
     {
-       read(fdin, (void *)&R[i], 1); convR[i]=(11*R[i] + 16*G[i] + 5*B[i])/32;
-       read(fdin, (void *)&G[i], 1); convG[i]=convR[i];
-       read(fdin, (void *)&B[i], 1); convB[i]=convR[i];
+       read(fdin, (void *)&R[i], 1); 
+       read(fdin, (void *)&G[i], 1);
+       read(fdin, (void *)&B[i], 1);
+       convR[i]=(11*R[i] + 16*G[i] + 5*B[i])/32;
+       convG[i]=convR[i];
+       convB[i]=convR[i];
     }
 
     // Start of convolution time stamp
     startTSC = readTSC();
 
-#if 0
-    // Skip first and last row, no neighbors to convolve with
-    for(i=1; i<(height-1); i++)
-    {
-
-        // Skip first and last column, no neighbors to convolve with
-       for(j=1; j<(width-1); j++)
-        {
-            temp=0;
-            temp += (PSF[0] * (FLOAT)R[((i-1)*width)+j-1]);
-            temp += (PSF[1] * (FLOAT)R[((i-1)*width)+j]);
-            temp += (PSF[2] * (FLOAT)R[((i-1)*width)+j+1]);
-            temp += (PSF[3] * (FLOAT)R[((i)*width)+j-1]);
-            temp += (PSF[4] * (FLOAT)R[((i)*width)+j]);
-            temp += (PSF[5] * (FLOAT)R[((i)*width)+j+1]);
-            temp += (PSF[6] * (FLOAT)R[((i+1)*width)+j-1]);
-            temp += (PSF[7] * (FLOAT)R[((i+1)*width)+j]);
-            temp += (PSF[8] * (FLOAT)R[((i+1)*width)+j+1]);
-	    if(temp<0.0) temp=0.0;
-	    if(temp>255.0) temp=255.0;
-	    convR[(i*width)+j]=(UINT8)temp;
-
-            temp=0;
-            temp += (PSF[0] * (FLOAT)G[((i-1)*width)+j-1]);
-            temp += (PSF[1] * (FLOAT)G[((i-1)*width)+j]);
-            temp += (PSF[2] * (FLOAT)G[((i-1)*width)+j+1]);
-            temp += (PSF[3] * (FLOAT)G[((i)*width)+j-1]);
-            temp += (PSF[4] * (FLOAT)G[((i)*width)+j]);
-            temp += (PSF[5] * (FLOAT)G[((i)*width)+j+1]);
-            temp += (PSF[6] * (FLOAT)G[((i+1)*width)+j-1]);
-            temp += (PSF[7] * (FLOAT)G[((i+1)*width)+j]);
-            temp += (PSF[8] * (FLOAT)G[((i+1)*width)+j+1]);
-	    if(temp<0.0) temp=0.0;
-	    if(temp>255.0) temp=255.0;
-	    convG[(i*width)+j]=(UINT8)temp;
-
-            temp=0;
-            temp += (PSF[0] * (FLOAT)B[((i-1)*width)+j-1]);
-            temp += (PSF[1] * (FLOAT)B[((i-1)*width)+j]);
-            temp += (PSF[2] * (FLOAT)B[((i-1)*width)+j+1]);
-            temp += (PSF[3] * (FLOAT)B[((i)*width)+j-1]);
-            temp += (PSF[4] * (FLOAT)B[((i)*width)+j]);
-            temp += (PSF[5] * (FLOAT)B[((i)*width)+j+1]);
-            temp += (PSF[6] * (FLOAT)B[((i+1)*width)+j-1]);
-            temp += (PSF[7] * (FLOAT)B[((i+1)*width)+j]);
-            temp += (PSF[8] * (FLOAT)B[((i+1)*width)+j+1]);
-	    if(temp<0.0) temp=0.0;
-	    if(temp>255.0) temp=255.0;
-	    convB[(i*width)+j]=(UINT8)temp;
-        }
-    }
-#endif
     // End of convolution time stamp
     stopTSC = readTSC();
     cycleCnt = cyclesElapsed(stopTSC, startTSC);
