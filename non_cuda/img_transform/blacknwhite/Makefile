@@ -7,7 +7,7 @@ all: blacknwhite
 blacknwhite: blacknwhite.o
 
 clean:
-	rm -rf blacknwhite *.o *~
+	rm -rf blacknwhite *.o *~ core.*
 
 imgclean: clean
-	rm -rf blacknwhite.ppm
+	rm -rf blacknwhite.ppm 
