@@ -17,6 +17,8 @@ UINT64 startTSC = 0;
 UINT64 stopTSC = 0;
 UINT64 cycleCnt = 0;
 
+#define PRINT_PTR(x) printf("%s: %p\n", #x, x);
+
 #define PMC_ASM(instructions,N,buf) \
   __asm__ __volatile__ ( instructions : "=A" (buf) : "c" (N) )
 
@@ -50,10 +52,7 @@ UINT8 *B;
 UINT8 *convR;
 UINT8 *convG;
 UINT8 *convB;
-UINT8 *infile;
 UINT8 *outfile;
-
-#define FREE_ALL_MEM  free(header); free(R); free(G); free(B); free(convR); free(convG); free(convB); free(infile); free(outfile);
 
 #define K 4.0
 
@@ -96,24 +95,24 @@ void read_ppm_header (int fd, int header_len)
    
    header[header_len]='\0';
    
-//    printf("header = %s\n", header);
+    printf("header = %s\n", header);
 }
 
-bool interleave_components(UINT8 *outfile, int num_pixels, UINT8 *convR, UINT8 *convG, UINT8 *convB)
+bool interleave_components(UINT8 *ofile, int num_pix, UINT8 *RR, UINT8 *GG, UINT8 *BB)
 {
    int retval = false;
    int ii = 0, jj = 0;
 
-   if(NULL != outfile &&
-      NULL != convR &&
-      NULL != convG &&
-      NULL != convB)
+   if(NULL != ofile &&
+      NULL != RR &&
+      NULL != GG &&
+      NULL != BB)
    {
-      for(ii = 0; ii < num_pixels*3; ii++)
+      for(ii = 0; ii < num_pix; ii++)
       {
-         outfile[jj++] = convR[ii];
-         outfile[jj++] = convG[ii];
-         outfile[jj++] = convB[ii];
+         ofile[jj++] = RR[ii];
+         ofile[jj++] = GG[ii];
+         ofile[jj++] = BB[ii];
       }
 
       retval = true;
@@ -140,7 +139,7 @@ void write_output_to_file(int fdout, int num_pixels, int header_len)
 
 bool open_files(int num, int* fdin, int* fdout)
 {
-   char infile[256], outfile[256];
+   char in_file[256], out_file[256];
 
    if(NULL == fdin ||
       NULL == fdout)
@@ -149,18 +148,18 @@ bool open_files(int num, int* fdin, int* fdout)
       return false;
    }
 
-   snprintf((char *)&infile[0], 256, infile_pattern, num);
-   snprintf((char *)&outfile[0], 256, outfile_pattern, num);
+   snprintf((char *)&in_file[0], 256, infile_pattern, num);
+   snprintf((char *)&out_file[0], 256, outfile_pattern, num);
    
-   if((*fdin = open((const char*)&infile[0], O_RDONLY, 0644)) < 0)
+   if((*fdin = open((const char*)&in_file[0], O_RDONLY, 0644)) < 0)
    {
-      printf("Error opening %s\n", infile);
+      printf("Error opening %s\n", in_file);
       return false;
    }
    
-   if((*fdout = open((const char*)&outfile[0], (O_RDWR | O_CREAT), 0666)) < 0)
+   if((*fdout = open((const char*)&out_file[0], (O_RDWR | O_CREAT), 0666)) < 0)
    {
-      printf("Error opening %s\n", outfile);
+      printf("Error opening %s\n", out_file);
       return false;
    }
 
@@ -217,8 +216,7 @@ int main(int argc, char *argv[])
        convR = malloc(num_pixels);
        convG = malloc(num_pixels);
        convB = malloc(num_pixels);
-       infile = malloc(num_pixels*3);
-       outfile = malloc(num_pixels*3);
+       outfile = malloc(header_len + num_pixels*3);
 
        if(NULL == header ||
           NULL == R ||
@@ -227,7 +225,6 @@ int main(int argc, char *argv[])
           NULL == convR ||
           NULL == convB ||
           NULL == convG ||
-          NULL == infile ||
           NULL == outfile)
        {
           printf("Could not allocate the required memory!\n");
@@ -267,9 +264,9 @@ int main(int argc, char *argv[])
 /***************** End of core computation **************/
 
        startTSC = readTSC();
-       
+
        write_output_to_file(fdout, num_pixels, header_len);
-       
+
        stopTSC = readTSC();
        print_time_info();
        
@@ -277,7 +274,14 @@ int main(int argc, char *argv[])
        close(fdout);
     } // End of for loop.
 
-    FREE_ALL_MEM;
-    
+    free(header); 
+    free(R); 
+    free(G); 
+    free(B); 
+    free(convR); 
+    free(convG); 
+    free(convB); 
+    free(outfile);
+
     return 0;
 }
