@@ -95,7 +95,7 @@ void read_ppm_header (int fd, int header_len)
    
    header[header_len]='\0';
    
-    printf("header = %s\n", header);
+//    printf("header = %s\n", header);
 }
 
 bool interleave_components(UINT8 *ofile, int num_pix, UINT8 *RR, UINT8 *GG, UINT8 *BB)
@@ -254,7 +254,9 @@ int main(int argc, char *argv[])
           read(fdin, (void *)&R[i], 1); 
           read(fdin, (void *)&G[i], 1);
           read(fdin, (void *)&B[i], 1);
-          convR[i]=(11*R[i] + 16*G[i] + 5*B[i])/32;
+//          convR[i]=(11*R[i] + 16*G[i] + 5*B[i])/32;
+          // Source: Wikipedia - http://en.wikipedia.org/wiki/Grayscale
+          convR[i]=(0.30*R[i] + 0.59*G[i] + 0.11*B[i]);
           convG[i]=convR[i];
           convB[i]=convR[i];
        }
