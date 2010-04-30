@@ -9,37 +9,41 @@
 #include "types.h"
 #include "tsc.h"
 
+// Turn this switch on if you want to 
+// use cuda based acceleration...
+#define USE_CUDA
+
 // PPM Edge Enhancement Code
 UINT8 *header;
-UINT8 *R;
-UINT8 *G;
-UINT8 *B;
+UINT8 *h_R;
+UINT8 *h_G;
+UINT8 *h_B;
 UINT8 *convR;
 UINT8 *convG;
 UINT8 *convB;
 UINT8 *infile;
 UINT8 *outfile;
 
-#define PARAMS_GOOD                             \
-   (NULL != header &&                           \
-    NULL != R &&                                \
-    NULL != G &&                                \
-    NULL != B &&                                \
-    NULL != convR &&                            \
-    NULL != convB &&                            \
-    NULL != convG &&                            \
-    NULL != infile &&                           \
+#define PARAMS_GOOD                               \
+   (NULL != header &&                             \
+    NULL != h_R &&                                \
+    NULL != h_G &&                                \
+    NULL != h_B &&                                \
+    NULL != convR &&                              \
+    NULL != convB &&                              \
+    NULL != convG &&                              \
+    NULL != infile &&                             \
     NULL != outfile)
 
-#define FREE_MEM                                \
-   free(header);                                \
-   free(R);                                     \
-   free(G);                                     \
-   free(B);                                     \
-   free(convR);                                 \
-   free(convG);                                 \
-   free(convB);                                 \
-   free(infile);                                \
+#define FREE_MEM                                  \
+   free(header);                                  \
+   free(h_R);                                     \
+   free(h_G);                                     \
+   free(h_B);                                     \
+   free(convR);                                   \
+   free(convG);                                   \
+   free(convB);                                   \
+   free(infile);                                  \
    free(outfile);
 
 /* User specified */
@@ -71,7 +75,8 @@ void save_ppm_header (int fd, int header_len)
 //    printf("header = %s\n", header);
 }
 
-bool interleave_components(UINT8 *ofile, int num_pix, UINT8 *RR, UINT8 *GG, UINT8 *BB)
+bool interleave_components(UINT8 *ofile, int num_pix, 
+                           UINT8 *RR, UINT8 *GG, UINT8 *BB)
 {
    int retval = false;
    int ii = 0, jj = 0;
@@ -94,7 +99,8 @@ bool interleave_components(UINT8 *ofile, int num_pix, UINT8 *RR, UINT8 *GG, UINT
    return retval;
 }
 
-void write_output_to_file(int fdout, int num_pixels, int header_len)
+void write_output_to_file(int fdout, int num_pixels, int header_len,
+                          UINT8 *RR, UINT8 *GG, UINT8 *BB)
 {
    if( -1 == fdout )
    {
@@ -102,15 +108,25 @@ void write_output_to_file(int fdout, int num_pixels, int header_len)
       exit (-1);
    }
 
+   if( NULL == RR ||
+       NULL == GG ||
+       NULL == BB )
+   {
+      printf("NULL parameters passed in! exiting!\n");
+      exit (-1);
+   }
+
    write(fdout, (void *)header, header_len);
    
-   if( true == interleave_components(outfile, num_pixels, convR, convG, convB))
+   if( true == interleave_components(outfile, num_pixels, 
+                                     RR, GG, BB))
    {
       write(fdout, (void *)outfile, num_pixels*3);
    }
 }
 
-bool separate_components (UINT8 *ifile, int num_pix, UINT8 *RR, UINT8 *GG, UINT8 *BB)
+bool separate_components (UINT8 *ifile, int num_pix, 
+                          UINT8 *RR, UINT8 *GG, UINT8 *BB)
 {
    int retval = false;
    int ii = 0, jj = 0;
@@ -122,9 +138,9 @@ bool separate_components (UINT8 *ifile, int num_pix, UINT8 *RR, UINT8 *GG, UINT8
    {
       for(ii = 0; ii < num_pix; ii++)
       {
-         R[ii] = ifile[jj++];
-         G[ii] = ifile[jj++];
-         B[ii] = ifile[jj++];         
+         h_R[ii] = ifile[jj++];
+         h_G[ii] = ifile[jj++];
+         h_B[ii] = ifile[jj++];         
       }
 
       retval = true;
@@ -133,7 +149,8 @@ bool separate_components (UINT8 *ifile, int num_pix, UINT8 *RR, UINT8 *GG, UINT8
    return retval;
 }
 
-void read_input_from_file(int fdin, int num_pixels, int header_len)
+void read_input_from_file(int fdin, int num_pixels, int header_len,
+                          UINT8 *RR, UINT8 *GG, UINT8 *BB)
 {
    if( -1 == fdin )
    {
@@ -141,11 +158,20 @@ void read_input_from_file(int fdin, int num_pixels, int header_len)
       exit (-1);
    }
 
+   if( NULL == RR ||
+       NULL == GG ||
+       NULL == BB )
+   {
+      printf("NULL parameters passed in! exiting!\n");
+      exit (-1);
+   }
+
    save_ppm_header(fdin, header_len);
 
    read(fdin, (void *)infile, num_pixels*3);
 
-   separate_components(infile, num_pixels, R, G, B);
+   separate_components(infile, num_pixels, 
+                       RR, GG, BB);
 }
 
 bool open_files(int num, int* fdin, int* fdout)
@@ -177,22 +203,32 @@ bool open_files(int num, int* fdin, int* fdout)
    return true;
 }
 
+#ifdef USE_CUDA
+
 /* Our main cuda kernel */
-#if 0
 __global__ void cudaKernel (UINT8 *R, UINT8 *G, UINT8 *B,
                             UINT8 *convR, UINT8 *convG, UINT8 *convB,
                             int N)
 {
+   int idx = threadIdx.x;
    
    if(idx < N)
    {
-//      convR[i]=(0.30*R[i] + 0.59*G[i] + 0.11*B[i]);
-      *convR[idx] = (0.30 * R[idx]) + (0.59 * G[idx]) + (0.11 * B[idx]);
-      *convG[idx] = *convR[idx];
-      *convB[idx] = *convR[idx];
+      convR[idx] = (0.30 * R[idx]) + (0.59 * G[idx]) + (0.11 * B[idx]);
+      convG[idx] = convR[idx];
+      convB[idx] = convR[idx];
    }
 }
-#endif
+
+void transform_pixels (int num_pixels)
+{
+   dim3 dimBlock(512);
+   dim3 dimGrid(ceil(num_pixels/(float)512));
+
+   cudaKernel<<<dimGrid, dimBlock>>>(NULL, NULL, NULL, NULL, NULL, NULL, num_pixels);
+}
+
+#else
 
 void convert_to_grayscale(int num_pixels)
 {
@@ -202,11 +238,18 @@ void convert_to_grayscale(int num_pixels)
    for(ii=0; ii<num_pixels; ii++)
    {
       // Source: Wikipedia - http://en.wikipedia.org/wiki/Grayscale
-      convR[ii]=(0.30*R[ii] + 0.59*G[ii] + 0.11*B[ii]);
+      convR[ii]=(0.30*h_R[ii] + 0.59*h_G[ii] + 0.11*h_B[ii]);
       convG[ii]=convR[ii];
       convB[ii]=convR[ii];
    }
 }
+
+void transform_pixels (int num_pixels)
+{
+   convert_to_grayscale(num_pixels);
+}
+
+#endif // USE_CUDA
 
 int main(int argc, char *argv[])
 {
@@ -241,9 +284,9 @@ int main(int argc, char *argv[])
 
       // Allocate memory for holding the pixels...
       header = (UINT8 *) malloc(header_len);
-      R = (UINT8 *) malloc(num_pixels);
-      G = (UINT8 *) malloc(num_pixels);
-      B = (UINT8 *) malloc(num_pixels);
+      h_R = (UINT8 *) malloc(num_pixels);
+      h_G = (UINT8 *) malloc(num_pixels);
+      h_B = (UINT8 *) malloc(num_pixels);
       convR = (UINT8 *) malloc(num_pixels);
       convG = (UINT8 *) malloc(num_pixels);
       convB = (UINT8 *) malloc(num_pixels);
@@ -268,16 +311,18 @@ int main(int argc, char *argv[])
          break;
       }
 
-      read_input_from_file(fdin, num_pixels, header_len);
+      read_input_from_file(fdin, num_pixels, header_len,
+                           h_R, h_G, h_B);
 
 /***************** Start of  core computation **************/
       save_start_time();
-      convert_to_grayscale(num_pixels);
+      transform_pixels(num_pixels);
       save_stop_time();
       print_time_info();
 /***************** End of core computation **************/
 
-      write_output_to_file(fdout, num_pixels, header_len);
+      write_output_to_file(fdout, num_pixels, header_len,
+                           convR, convG, convB);
 
       close(fdin);
       close(fdout);
