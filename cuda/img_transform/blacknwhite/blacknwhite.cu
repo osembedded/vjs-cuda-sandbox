@@ -22,21 +22,10 @@ UINT8 *outfile;
 #define K 4.0
 
 FLOAT PSF[9] = {-K/8.0, -K/8.0, -K/8.0, -K/8.0, K+1.0, -K/8.0, -K/8.0, -K/8.0, -K/8.0};
-UINT64 microsecs=0, clksPerMicro=0, millisecs=0;
 
 /* User specified */
 static char infile_pattern[128];
 static char outfile_pattern[128];
-
-void print_time_info (void)
-{
-   cycleCnt = cyclesElapsed(stopTSC, startTSC);
-   microsecs = cycleCnt/clksPerMicro;
-   millisecs = microsecs/1000;
-   
-   printf("Convolution time in cycles=%llu, rate=%llu, about %llu millisecs\n",
-           cycleCnt, clksPerMicro, millisecs);
-}
 
 void read_ppm_header (int fd, int header_len)
 {
@@ -134,7 +123,6 @@ bool open_files(int num, int* fdin, int* fdout)
 int main(int argc, char *argv[])
 {
     int fdin, fdout, i;
-    FLOAT clkRate;
     int height = 0;
     int width = 0;
     int num_pixels = 0;
@@ -144,17 +132,7 @@ int main(int argc, char *argv[])
     int jj = 0;
 
     // Estimate CPU clock rate
-    startTSC = readTSC();
-    usleep(1000000);
-    stopTSC = readTSC();
-    cycleCnt = cyclesElapsed(stopTSC, startTSC);
-
-    printf("Cycle Count=%llu\n", cycleCnt);
-    clkRate = ((FLOAT)cycleCnt)/1000000.0;
-    clksPerMicro=(UINT64)clkRate;
-    printf("Based on usleep accuracy, CPU clk rate = %llu clks/sec,",
-          cycleCnt);
-    printf(" %7.1f Mhz\n", clkRate);
+    estimate_clk_rate();
     
     if(argc != 8)
     {
@@ -211,7 +189,7 @@ int main(int argc, char *argv[])
        read_ppm_header(fdin, header_len);
        
 /***************** Start of  core computation **************/
-       startTSC = readTSC();
+       save_start_time();
        
        // Read RGB data
        for(i=0; i<num_pixels; i++)
@@ -226,17 +204,14 @@ int main(int argc, char *argv[])
           convB[i]=convR[i];
        }
        
-       stopTSC = readTSC();
+       save_stop_time();
        print_time_info();
 /***************** End of core computation **************/
-
-       startTSC = readTSC();
-
+       save_start_time();
        write_output_to_file(fdout, num_pixels, header_len);
-
-       stopTSC = readTSC();
+       save_stop_time();
        print_time_info();
-       
+
        close(fdin);
        close(fdout);
     } // End of for loop.
