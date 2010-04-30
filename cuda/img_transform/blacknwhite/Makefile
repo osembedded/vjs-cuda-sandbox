@@ -1,13 +1,40 @@
-CPPFLAGS = -O0 -g -Wall -Werror
+################################################################################
+#
+# Build script for project
+#
+################################################################################
+export OMIT_CUTIL_LIB=1
 
-.PHONY: clean imgclean
+BINDIR = ./
 
-all: blacknwhite
+# Add source files here                                                                                                               
+EXECUTABLE      := blacknwhite
 
-blacknwhite: blacknwhite.o
+# Cuda source files (compiled with cudacc)                                                                                            
+CUFILES         := blacknwhite.cu
 
-clean:
-	rm -rf blacknwhite *.o *~ core.*
+# C/C++ source files (compiled with gcc / c++)                                                                                        
+CCFILES         := \
 
-imgclean: clean
-	rm -rf blacknwhite.ppm 
+ROOTDIR := ~/NVIDIA_GPU_Computing_SDK/C/common
+
+################################################################################
+# Rules and targets                                                                                        
+include ~/NVIDIA_GPU_Computing_SDK/C/common/common.mk
+
+cleanall:
+	rm -rf blacknwhite obj release *~
+
+#CPPFLAGS = -O0 -g -Wall -Werror
+
+#.PHONY: clean imgclean
+
+#all: blacknwhite
+
+#blacknwhite: blacknwhite.o
+
+#clean:
+#	rm -rf blacknwhite *.o *~ core.*
+
+#imgclean: clean
+#	rm -rf blacknwhite.ppm 
