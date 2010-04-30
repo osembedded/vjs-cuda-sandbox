@@ -19,10 +19,6 @@ UINT8 *convG;
 UINT8 *convB;
 UINT8 *outfile;
 
-#define K 4.0
-
-FLOAT PSF[9] = {-K/8.0, -K/8.0, -K/8.0, -K/8.0, K+1.0, -K/8.0, -K/8.0, -K/8.0, -K/8.0};
-
 /* User specified */
 static char infile_pattern[128];
 static char outfile_pattern[128];
@@ -197,7 +193,7 @@ int main(int argc, char *argv[])
           read(fdin, (void *)&R[i], 1); 
           read(fdin, (void *)&G[i], 1);
           read(fdin, (void *)&B[i], 1);
-//          convR[i]=(11*R[i] + 16*G[i] + 5*B[i])/32;
+
           // Source: Wikipedia - http://en.wikipedia.org/wiki/Grayscale
           convR[i]=(0.30*R[i] + 0.59*G[i] + 0.11*B[i]);
           convG[i]=convR[i];
