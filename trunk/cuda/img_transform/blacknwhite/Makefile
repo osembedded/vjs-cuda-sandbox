@@ -14,7 +14,8 @@ EXECUTABLE      := blacknwhite
 CUFILES         := blacknwhite.cu
 
 # C/C++ source files (compiled with gcc / c++)                                                                                        
-CCFILES         := \
+CCFILES         := 	\
+			tsc.c
 
 ROOTDIR := ~/NVIDIA_GPU_Computing_SDK/C/common
 
