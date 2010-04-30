@@ -11,7 +11,7 @@
 
 // Turn this switch on if you want to 
 // use cuda based acceleration...
-#define USE_CUDA
+//#define USE_CUDA
 
 // PPM Edge Enhancement Code
 UINT8 *header;
@@ -206,51 +206,62 @@ bool open_files(int num, int* fdin, int* fdout)
 #ifdef USE_CUDA
 
 /* Our main cuda kernel */
-__global__ void cudaKernel (UINT8 *R, UINT8 *G, UINT8 *B,
-                            UINT8 *convR, UINT8 *convG, UINT8 *convB,
-                            int N)
+__global__ void cudaKernel (UINT8 *Rin, UINT8 *Gin, UINT8 *Bin,
+                            UINT8 *Rout, UINT8 *Gout, UINT8 *Bout,
+                            int NN)
 {
    int idx = threadIdx.x;
    
-   if(idx < N)
+   if(idx < NN)
    {
-      convR[idx] = (0.30 * R[idx]) + (0.59 * G[idx]) + (0.11 * B[idx]);
-      convG[idx] = convR[idx];
-      convB[idx] = convR[idx];
+      Rout[idx] = (0.30 * Rin[idx]) + (0.59 * Gin[idx]) + (0.11 * Bin[idx]);
+      Gout[idx] = Rout[idx];
+      Bout[idx] = Rout[idx];
    }
 }
 
-void transform_pixels (int num_pixels)
+void transform_pixels (UINT8 *Rin, UINT8 *Gin, UINT8 *Bin,
+                       UINT8 *Rout, UINT8 *Gout, UINT8 *Bout,
+                       int NN)
+
 {
    dim3 dimBlock(512);
-   dim3 dimGrid(ceil(num_pixels/(float)512));
+   dim3 dimGrid(ceil(NN/(float)512));
 
-   cudaKernel<<<dimGrid, dimBlock>>>(NULL, NULL, NULL, NULL, NULL, NULL, num_pixels);
+   cudaKernel<<<dimGrid, dimBlock>>>(NULL, NULL, NULL, NULL, NULL, NULL, NN);
 }
 
 #else
 
-void convert_to_grayscale(int num_pixels)
+void convert_to_grayscale (UINT8 *Rin, UINT8 *Gin, UINT8 *Bin,
+                           UINT8 *Rout, UINT8 *Gout, UINT8 *Bout,
+                           int NN)
 {
    int ii = 0;
 
    // Read RGB data
-   for(ii=0; ii<num_pixels; ii++)
+   for(ii = 0; ii < NN; ii++)
    {
       // Source: Wikipedia - http://en.wikipedia.org/wiki/Grayscale
-      convR[ii]=(0.30*h_R[ii] + 0.59*h_G[ii] + 0.11*h_B[ii]);
-      convG[ii]=convR[ii];
-      convB[ii]=convR[ii];
+      Rout[ii]=( 0.30 * Rin[ii] ) + ( 0.59 * Gin[ii] ) + ( 0.11 * Bin[ii] );
+      Gout[ii]=Rout[ii];
+      Bout[ii]=Rout[ii];
    }
 }
 
-void transform_pixels (int num_pixels)
+void transform_pixels (UINT8 *Rin, UINT8 *Gin, UINT8 *Bin,
+                       UINT8 *Rout, UINT8 *Gout, UINT8 *Bout,
+                       int NN)
 {
-   convert_to_grayscale(num_pixels);
+   convert_to_grayscale(Rin, Gin, Bin,
+                        Rout, Gout, Bout,
+                        NN);
 }
 
 #endif // USE_CUDA
 
+
+#define NUM_ARGS (8)
 int main(int argc, char *argv[])
 {
    int fdin, fdout;
@@ -265,7 +276,7 @@ int main(int argc, char *argv[])
    // Estimate CPU clock rate
    estimate_clk_rate();
     
-   if(argc != 8)
+   if(argc != NUM_ARGS)
    {
       printf("Usage: blacknwhite <infile%%d.ppm> <width> <height> <header_len> <outfile%%d.ppm> <seq_start_num> <count>\n");
       exit(-1);
@@ -280,7 +291,8 @@ int main(int argc, char *argv[])
 
       num_pixels = width * height;
 
-      printf("Using params: infile pattern: %s, outfile pattern: %s, \nheight: %d, width: %d, header_len: %d, seq_start: %d, seq_count: %d\n", argv[1], argv[5], height, width, header_len, seq_start_num, seq_count);
+      printf("Using params: infile pattern: %s, outfile pattern: %s, \nheight: %d, width: %d, header_len: %d, seq_start: %d, seq_count: %d\n", 
+             argv[1], argv[5], height, width, header_len, seq_start_num, seq_count);
 
       // Allocate memory for holding the pixels...
       header = (UINT8 *) malloc(header_len);
@@ -316,7 +328,9 @@ int main(int argc, char *argv[])
 
 /***************** Start of  core computation **************/
       save_start_time();
-      transform_pixels(num_pixels);
+      transform_pixels(h_R, h_G, h_B,
+                       convR, convG, convB,
+                       num_pixels);
       save_stop_time();
       print_time_info();
 /***************** End of core computation **************/
