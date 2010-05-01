@@ -23,6 +23,7 @@ UINT8 *d_G;
 UINT8 *d_B;
 UINT8 *infile;
 UINT8 *outfile;
+UINT8 *frame_times;
 
 #define PARAMS_GOOD                               \
    (NULL != header &&                             \
@@ -33,7 +34,8 @@ UINT8 *outfile;
     NULL != d_B &&                                \
     NULL != d_G &&                                \
     NULL != infile &&                             \
-    NULL != outfile)
+    NULL != outfile &&                            \
+    NULL != frame_times)
 
 #ifdef USE_CUDA
 #define FREE_MEM                                      \
@@ -45,7 +47,8 @@ UINT8 *outfile;
    cudaFree(d_G);                                     \
    cudaFree(d_B);                                     \
    free(infile);                                      \
-   free(outfile);
+   free(outfile);                                     \
+   free(frame_times);
 #else
 #define FREE_MEM                                      \
    free(header);                                      \
@@ -56,7 +59,8 @@ UINT8 *outfile;
    free(d_G);                                         \
    free(d_B);                                         \
    free(infile);                                      \
-   free(outfile);
+   free(outfile);                                     \
+   free(frame_times);
 #endif // USE_CUDA
 
 
@@ -241,7 +245,6 @@ void transform_pixels (UINT8 *h_RR, UINT8 *h_GG, UINT8 *h_BB,
 {
    int block_size = 512;
    dim3 dimBlock(block_size);
-//   dim3 dimGrid(ceil(NN/(float)block_size));
    dim3 dimGrid(NN/block_size);
 
 //   printf("block Size = %d, NN = %d\n", block_size, NN);
@@ -257,10 +260,6 @@ void transform_pixels (UINT8 *h_RR, UINT8 *h_GG, UINT8 *h_BB,
    cudaMemcpy(h_RR, d_RR, NN, cudaMemcpyDeviceToHost);
    cudaMemcpy(h_GG, d_GG, NN, cudaMemcpyDeviceToHost);
    cudaMemcpy(h_BB, d_BB, NN, cudaMemcpyDeviceToHost);
-
-//   memset(h_RR, 0, NN);
-//   memset(h_GG, 0, NN);
-//   memset(h_BB, 0, NN);
 }
 
 #else
@@ -291,6 +290,26 @@ void transform_pixels (UINT8 *Rin, UINT8 *Gin, UINT8 *Bin,
 }
 
 #endif // USE_CUDA
+
+void print_time_stats(int num_frames)
+{
+   int ii = 0;
+   UINT64 totalTime = 0;
+
+   if(0 == num_frames)
+   {
+      printf("No frames processed! Exiting!\n");
+      exit (-1);
+   }
+
+   for(ii = 0; ii < num_frames; ii++)
+   {
+      totalTime += frame_times[ii];
+   }
+
+   printf("Total time taken to process %d frames: %llu mSecs\n", num_frames, totalTime);
+   printf("Average time per frame: %llu mSecs\n", totalTime/num_frames);
+}
 
 
 #define NUM_ARGS (8)
@@ -347,6 +366,9 @@ int main(int argc, char *argv[])
       outfile = (UINT8 *) malloc(header_len + num_pixels*3);
       infile = (UINT8 *) malloc(header_len + num_pixels*3);
 
+      // Allocate memory for computation.
+      frame_times = (UINT8 *) malloc(seq_count);
+
       if(true != PARAMS_GOOD)
       {
          printf("Could not allocate the required memory!\n");
@@ -373,8 +395,9 @@ int main(int argc, char *argv[])
       transform_pixels(h_R, h_G, h_B,
                        d_R, d_G, d_B,
                        num_pixels);
+
       save_stop_time();
-      print_time_info();
+      frame_times[jj] = calc_time_diff();
 /***************** End of core computation **************/
 
 #ifdef USE_CUDA
@@ -389,6 +412,8 @@ int main(int argc, char *argv[])
       close(fdout);
 
    } // Loop through sequence of images
+
+   print_time_stats(jj);
 
    FREE_MEM;
 
