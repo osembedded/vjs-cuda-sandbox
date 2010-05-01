@@ -36,14 +36,12 @@ UINT64 cyclesElapsed(UINT64 stopTS, UINT64 startTS)
    return (stopTS - startTS);
 }
 
-void print_time_info (void)
+UINT64 calc_time_diff(void)
 {
    cycleCnt = cyclesElapsed(stopTSC, startTSC);
    microsecs = cycleCnt/clksPerMicro;
    millisecs = microsecs/1000;
-   
-   printf("Convolution time in cycles=%llu, rate=%llu, about %llu millisecs\n",
-          cycleCnt, clksPerMicro, millisecs);
+   return millisecs;
 }
 
 void save_start_time(void)
