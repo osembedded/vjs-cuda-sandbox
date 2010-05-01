@@ -11,16 +11,16 @@
 
 // Turn this switch on if you want to 
 // use cuda based acceleration...
-//#define USE_CUDA
+#define USE_CUDA
 
 // PPM Edge Enhancement Code
 UINT8 *header;
 UINT8 *h_R;
 UINT8 *h_G;
 UINT8 *h_B;
-UINT8 *convR;
-UINT8 *convG;
-UINT8 *convB;
+UINT8 *d_R;
+UINT8 *d_G;
+UINT8 *d_B;
 UINT8 *infile;
 UINT8 *outfile;
 
@@ -29,22 +29,36 @@ UINT8 *outfile;
     NULL != h_R &&                                \
     NULL != h_G &&                                \
     NULL != h_B &&                                \
-    NULL != convR &&                              \
-    NULL != convB &&                              \
-    NULL != convG &&                              \
+    NULL != d_R &&                                \
+    NULL != d_B &&                                \
+    NULL != d_G &&                                \
     NULL != infile &&                             \
     NULL != outfile)
 
-#define FREE_MEM                                  \
-   free(header);                                  \
-   free(h_R);                                     \
-   free(h_G);                                     \
-   free(h_B);                                     \
-   free(convR);                                   \
-   free(convG);                                   \
-   free(convB);                                   \
-   free(infile);                                  \
+#ifdef USE_CUDA
+#define FREE_MEM                                      \
+   free(header);                                      \
+   free(h_R);                                         \
+   free(h_G);                                         \
+   free(h_B);                                         \
+   cudaFree(d_R);                                     \
+   cudaFree(d_G);                                     \
+   cudaFree(d_B);                                     \
+   free(infile);                                      \
    free(outfile);
+#else
+#define FREE_MEM                                      \
+   free(header);                                      \
+   free(h_R);                                         \
+   free(h_G);                                         \
+   free(h_B);                                         \
+   free(d_R);                                         \
+   free(d_G);                                         \
+   free(d_B);                                         \
+   free(infile);                                      \
+   free(outfile);
+#endif // USE_CUDA
+
 
 /* User specified */
 static char infile_pattern[128];
@@ -299,9 +313,19 @@ int main(int argc, char *argv[])
       h_R = (UINT8 *) malloc(num_pixels);
       h_G = (UINT8 *) malloc(num_pixels);
       h_B = (UINT8 *) malloc(num_pixels);
-      convR = (UINT8 *) malloc(num_pixels);
-      convG = (UINT8 *) malloc(num_pixels);
-      convB = (UINT8 *) malloc(num_pixels);
+
+#ifdef USE_CUDA
+      cudaMalloc((void **) &d_R, num_pixels);
+      cudaMalloc((void **) &d_G, num_pixels);
+      cudaMalloc((void **) &d_B, num_pixels);
+#else
+      // Note: Even though these are named 'd_' for device memory,
+      // In the case of NON CUDA code, we allocate them from the host.
+      d_R = (UINT8 *) malloc(num_pixels);
+      d_G = (UINT8 *) malloc(num_pixels);
+      d_B = (UINT8 *) malloc(num_pixels);
+#endif
+
       outfile = (UINT8 *) malloc(header_len + num_pixels*3);
       infile = (UINT8 *) malloc(header_len + num_pixels*3);
 
@@ -329,14 +353,14 @@ int main(int argc, char *argv[])
 /***************** Start of  core computation **************/
       save_start_time();
       transform_pixels(h_R, h_G, h_B,
-                       convR, convG, convB,
+                       d_R, d_G, d_B,
                        num_pixels);
       save_stop_time();
       print_time_info();
 /***************** End of core computation **************/
 
       write_output_to_file(fdout, num_pixels, header_len,
-                           convR, convG, convB);
+                           d_R, d_G, d_B);
 
       close(fdin);
       close(fdout);
