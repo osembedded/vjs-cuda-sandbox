@@ -224,7 +224,7 @@ bool open_files(int num, int* fdin, int* fdout)
 __global__ void cudaKernel (UINT8 *RR, UINT8 *GG, UINT8 *BB,
                             int NN)
 {
-   int idx = threadIdx.x;
+   int idx = blockIdx.x * blockDim.x + threadIdx.x;
    
    if(idx < NN)
    {
@@ -239,19 +239,28 @@ void transform_pixels (UINT8 *h_RR, UINT8 *h_GG, UINT8 *h_BB,
                        int NN)
 
 {
-   dim3 dimBlock(512);
-   dim3 dimGrid(ceil(NN/(float)512));
+   int block_size = 512;
+   dim3 dimBlock(block_size);
+//   dim3 dimGrid(ceil(NN/(float)block_size));
+   dim3 dimGrid(NN/block_size);
+
+//   printf("block Size = %d, NN = %d\n", block_size, NN);
+//   printf("Grid Size = %d\n",NN/block_size);
 
    cudaMemcpy(d_RR, h_RR, NN, cudaMemcpyHostToDevice);
    cudaMemcpy(d_GG, h_GG, NN, cudaMemcpyHostToDevice);
    cudaMemcpy(d_BB, h_BB, NN, cudaMemcpyHostToDevice);
 
    cudaKernel<<<dimGrid, dimBlock>>>(d_RR, d_GG, d_BB, NN);
+   cudaThreadSynchronize();
 
    cudaMemcpy(h_RR, d_RR, NN, cudaMemcpyDeviceToHost);
-   cudaMemcpy(h_RR, d_RR, NN, cudaMemcpyDeviceToHost);
-   cudaMemcpy(h_RR, d_RR, NN, cudaMemcpyDeviceToHost);
-      
+   cudaMemcpy(h_GG, d_GG, NN, cudaMemcpyDeviceToHost);
+   cudaMemcpy(h_BB, d_BB, NN, cudaMemcpyDeviceToHost);
+
+//   memset(h_RR, 0, NN);
+//   memset(h_GG, 0, NN);
+//   memset(h_BB, 0, NN);
 }
 
 #else
