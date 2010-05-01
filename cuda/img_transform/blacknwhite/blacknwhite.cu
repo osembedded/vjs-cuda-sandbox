@@ -102,6 +102,7 @@ bool interleave_components(UINT8 *ofile, int num_pix,
    {
       for(ii = 0; ii < num_pix; ii++)
       {
+         // This is where it seg faults if we mess up the memory access...
          ofile[jj++] = RR[ii];
          ofile[jj++] = GG[ii];
          ofile[jj++] = BB[ii];
@@ -220,29 +221,37 @@ bool open_files(int num, int* fdin, int* fdout)
 #ifdef USE_CUDA
 
 /* Our main cuda kernel */
-__global__ void cudaKernel (UINT8 *Rin, UINT8 *Gin, UINT8 *Bin,
-                            UINT8 *Rout, UINT8 *Gout, UINT8 *Bout,
+__global__ void cudaKernel (UINT8 *RR, UINT8 *GG, UINT8 *BB,
                             int NN)
 {
    int idx = threadIdx.x;
    
    if(idx < NN)
    {
-      Rout[idx] = (0.30 * Rin[idx]) + (0.59 * Gin[idx]) + (0.11 * Bin[idx]);
-      Gout[idx] = Rout[idx];
-      Bout[idx] = Rout[idx];
+      RR[idx] = (0.30 * RR[idx]) + (0.59 * GG[idx]) + (0.11 * BB[idx]);
+      GG[idx] = RR[idx];
+      BB[idx] = RR[idx];
    }
 }
 
-void transform_pixels (UINT8 *Rin, UINT8 *Gin, UINT8 *Bin,
-                       UINT8 *Rout, UINT8 *Gout, UINT8 *Bout,
+void transform_pixels (UINT8 *h_RR, UINT8 *h_GG, UINT8 *h_BB,
+                       UINT8 *d_RR, UINT8 *d_GG, UINT8 *d_BB,
                        int NN)
 
 {
    dim3 dimBlock(512);
    dim3 dimGrid(ceil(NN/(float)512));
 
-   cudaKernel<<<dimGrid, dimBlock>>>(NULL, NULL, NULL, NULL, NULL, NULL, NN);
+   cudaMemcpy(d_RR, h_RR, NN, cudaMemcpyHostToDevice);
+   cudaMemcpy(d_GG, h_GG, NN, cudaMemcpyHostToDevice);
+   cudaMemcpy(d_BB, h_BB, NN, cudaMemcpyHostToDevice);
+
+   cudaKernel<<<dimGrid, dimBlock>>>(d_RR, d_GG, d_BB, NN);
+
+   cudaMemcpy(h_RR, d_RR, NN, cudaMemcpyDeviceToHost);
+   cudaMemcpy(h_RR, d_RR, NN, cudaMemcpyDeviceToHost);
+   cudaMemcpy(h_RR, d_RR, NN, cudaMemcpyDeviceToHost);
+      
 }
 
 #else
@@ -359,8 +368,13 @@ int main(int argc, char *argv[])
       print_time_info();
 /***************** End of core computation **************/
 
+#ifdef USE_CUDA
+      write_output_to_file(fdout, num_pixels, header_len,
+                           h_R, h_G, h_B);
+#else
       write_output_to_file(fdout, num_pixels, header_len,
                            d_R, d_G, d_B);
+#endif
 
       close(fdin);
       close(fdout);

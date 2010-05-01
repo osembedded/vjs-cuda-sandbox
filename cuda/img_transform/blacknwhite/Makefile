@@ -4,6 +4,7 @@
 #
 ################################################################################
 export OMIT_CUTIL_LIB=1
+export dbg=1
 
 BINDIR = ./
 
@@ -23,7 +24,7 @@ ROOTDIR := ~/NVIDIA_GPU_Computing_SDK/C/common
 include ~/NVIDIA_GPU_Computing_SDK/C/common/common.mk
 
 cleanall:
-	rm -rf blacknwhite obj release *~
+	rm -rf blacknwhite obj release *~ core.*
 
 #CPPFLAGS = -O0 -g -Wall -Werror
 
