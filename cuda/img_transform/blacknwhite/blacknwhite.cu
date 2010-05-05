@@ -11,9 +11,9 @@
 
 // Turn this switch on if you want to 
 // use cuda based acceleration...
-//#define USE_CUDA
+#define USE_CUDA
 
-#define NUM_SIMUL_FRAMES (4)
+#define NUM_SIMUL_FRAMES (1)
 
 // PPM Edge Enhancement Code
 UINT8 *header;
@@ -290,25 +290,22 @@ void transform_pixels (UINT8 **h_RR, UINT8 **h_GG, UINT8 **h_BB,
 {
    int block_size = 512;
    dim3 dimBlock(block_size);
-   dim3 dimGrid(NN/block_size);
-   int ii = 0;
+//   dim3 dimGrid(NN/block_size);
+   dim3 dimGrid(NN*NUM_SIMUL_FRAMES/block_size);
 
 //   printf("block Size = %d, NN = %d\n", block_size, NN);
 //   printf("Grid Size = %d\n",NN/block_size);
    
-   for(ii=0; ii< NUM_SIMUL_FRAMES; ii++)
-   {
-      cudaMemcpy(d_RR[ii], h_RR[ii], NN, cudaMemcpyHostToDevice);
-      cudaMemcpy(d_GG[ii], h_GG[ii], NN, cudaMemcpyHostToDevice);
-      cudaMemcpy(d_BB[ii], h_BB[ii], NN, cudaMemcpyHostToDevice);
+      cudaMemcpy(d_RR, h_RR, NN * NUM_SIMUL_FRAMES, cudaMemcpyHostToDevice);
+      cudaMemcpy(d_GG, h_GG, NN * NUM_SIMUL_FRAMES, cudaMemcpyHostToDevice);
+      cudaMemcpy(d_BB, h_BB, NN * NUM_SIMUL_FRAMES, cudaMemcpyHostToDevice);
 
-      cudaKernel<<<dimGrid, dimBlock>>>(d_RR[ii], d_GG[ii], d_BB[ii], NN);
+      cudaKernel<<<dimGrid, dimBlock>>>(d_RR[0], d_GG[0], d_BB[0], NN * NUM_SIMUL_FRAMES);
       cudaThreadSynchronize();
-      
-      cudaMemcpy(h_RR[ii], d_RR[ii], NN, cudaMemcpyDeviceToHost);
-      cudaMemcpy(h_GG[ii], d_GG[ii], NN, cudaMemcpyDeviceToHost);
-      cudaMemcpy(h_BB[ii], d_BB[ii], NN, cudaMemcpyDeviceToHost);
-   }
+
+      cudaMemcpy(h_RR, d_RR, NN * NUM_SIMUL_FRAMES, cudaMemcpyDeviceToHost);
+      cudaMemcpy(h_GG, d_GG, NN * NUM_SIMUL_FRAMES, cudaMemcpyDeviceToHost);
+      cudaMemcpy(h_BB, d_BB, NN * NUM_SIMUL_FRAMES, cudaMemcpyDeviceToHost);
 }
 
 #else
