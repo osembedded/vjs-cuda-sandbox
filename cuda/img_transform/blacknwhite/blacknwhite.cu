@@ -13,61 +13,61 @@
 // use cuda based acceleration...
 //#define USE_CUDA
 
-#define NUM_FRAMES (1)
+#define NUM_SIMUL_FRAMES (4)
 
 // PPM Edge Enhancement Code
 UINT8 *header;
-UINT8 *h_R[NUM_FRAMES];
-UINT8 *h_G[NUM_FRAMES];
-UINT8 *h_B[NUM_FRAMES];
-UINT8 *d_R[NUM_FRAMES];
-UINT8 *d_G[NUM_FRAMES];
-UINT8 *d_B[NUM_FRAMES];
+UINT8 *h_R[NUM_SIMUL_FRAMES];
+UINT8 *h_G[NUM_SIMUL_FRAMES];
+UINT8 *h_B[NUM_SIMUL_FRAMES];
+UINT8 *d_R[NUM_SIMUL_FRAMES];
+UINT8 *d_G[NUM_SIMUL_FRAMES];
+UINT8 *d_B[NUM_SIMUL_FRAMES];
 UINT8 *infile;
 UINT8 *outfile;
-UINT8 *frame_times;
+int *frame_times;
 
-#define PARAMS_GOOD                               \
-   (NULL != header &&                             \
-    NULL != h_R &&                                \
-    NULL != h_G &&                                \
-    NULL != h_B &&                                \
-    NULL != d_R &&                                \
-    NULL != d_B &&                                \
-    NULL != d_G &&                                \
-    NULL != infile &&                             \
-    NULL != outfile &&                            \
+#define PARAMS_GOOD                             \
+   (NULL != header &&                           \
+    NULL != h_R &&                              \
+    NULL != h_G &&                              \
+    NULL != h_B &&                              \
+    NULL != d_R &&                              \
+    NULL != d_B &&                              \
+    NULL != d_G &&                              \
+    NULL != infile &&                           \
+    NULL != outfile &&                          \
     NULL != frame_times)
 
 #ifdef USE_CUDA
-#define FREE_MEM                                              \
-   free(header);                                              \
-   for(int xx=0; xx< NUM_FRAMES; xx++)                        \
-   {                                                          \
-      free(h_R[xx]);                                          \
-      free(h_G[xx]);                                          \
-      free(h_B[xx]);                                          \
-      cudaFree(d_R[xx]);                                      \
-      cudaFree(d_G[xx]);                                      \
-      cudaFree(d_B[xx]);                                      \
-   }                                                          \
-   free(infile);                                              \
-   free(outfile);                                             \
+#define FREE_MEM                                \
+   free(header);                                \
+   for(int xx=0; xx< NUM_SIMUL_FRAMES; xx++)    \
+   {                                            \
+      free(h_R[xx]);                            \
+      free(h_G[xx]);                            \
+      free(h_B[xx]);                            \
+      cudaFree(d_R[xx]);                        \
+      cudaFree(d_G[xx]);                        \
+      cudaFree(d_B[xx]);                        \
+   }                                            \
+   free(infile);                                \
+   free(outfile);                               \
    free(frame_times);
 #else
-#define FREE_MEM                                              \
-   free(header);                                              \
-   for(int xx=0; xx< NUM_FRAMES; xx++)                        \
-   {                                                          \
-      free(h_R[xx]);                                          \
-      free(h_G[xx]);                                          \
-      free(h_B[xx]);                                          \
-      free(d_R[xx]);                                          \
-      free(d_G[xx]);                                          \
-      free(d_B[xx]);                                          \
-   }                                                          \
-   free(infile);                                              \
-   free(outfile);                                             \
+#define FREE_MEM                                \
+   free(header);                                \
+   for(int xx=0; xx< NUM_SIMUL_FRAMES; xx++)    \
+   {                                            \
+      free(h_R[xx]);                            \
+      free(h_G[xx]);                            \
+      free(h_B[xx]);                            \
+      free(d_R[xx]);                            \
+      free(d_G[xx]);                            \
+      free(d_B[xx]);                            \
+   }                                            \
+   free(infile);                                \
+   free(outfile);                               \
    free(frame_times);
 #endif // USE_CUDA
 
@@ -296,7 +296,7 @@ void transform_pixels (UINT8 **h_RR, UINT8 **h_GG, UINT8 **h_BB,
 //   printf("block Size = %d, NN = %d\n", block_size, NN);
 //   printf("Grid Size = %d\n",NN/block_size);
    
-   for(ii=0; ii< NUM_FRAMES; ii++)
+   for(ii=0; ii< NUM_SIMUL_FRAMES; ii++)
    {
       cudaMemcpy(d_RR[ii], h_RR[ii], NN, cudaMemcpyHostToDevice);
       cudaMemcpy(d_GG[ii], h_GG[ii], NN, cudaMemcpyHostToDevice);
@@ -320,7 +320,7 @@ void convert_to_grayscale (UINT8 **Rin, UINT8 **Gin, UINT8 **Bin,
    int ii = 0;
    int jj = 0;
 
-   for(jj=0; jj < NUM_FRAMES; jj++)
+   for(jj=0; jj < NUM_SIMUL_FRAMES; jj++)
    {
       // Read RGB data
       for(ii = 0; ii < NN; ii++)
@@ -357,6 +357,7 @@ void print_time_stats(int num_frames)
 
    for(ii = 0; ii < num_frames; ii++)
    {
+      printf("frame_times[%d]: %d\n", ii, frame_times[ii]);
       totalTime += frame_times[ii];
    }
 
@@ -401,7 +402,7 @@ int main(int argc, char *argv[])
       // Allocate memory for holding the pixels...
       header = (UINT8 *) malloc(header_len);
 
-      for(ii = 0; ii < NUM_FRAMES; ii++)
+      for(ii = 0; ii < NUM_SIMUL_FRAMES; ii++)
       {
          h_R[ii] = (UINT8 *) malloc(num_pixels);
          h_G[ii] = (UINT8 *) malloc(num_pixels);
@@ -423,7 +424,7 @@ int main(int argc, char *argv[])
          infile = (UINT8 *) malloc(header_len + num_pixels*3);
          
          // Allocate memory for computation.
-         frame_times = (UINT8 *) malloc(seq_count);
+         frame_times = (int *) calloc(seq_count, sizeof(int));
          
          if(true != PARAMS_GOOD)
          {
@@ -435,9 +436,9 @@ int main(int argc, char *argv[])
          strncpy(outfile_pattern, argv[5], sizeof(outfile_pattern));
       }
       
-      for(jj=seq_start_num; jj<(seq_start_num + seq_count); jj=jj+NUM_FRAMES)
+      for(jj=seq_start_num; jj<(seq_start_num + seq_count); jj=jj+NUM_SIMUL_FRAMES)
       {
-         for(ii=0; ii < NUM_FRAMES; ii++)
+         for(ii=0; ii < NUM_SIMUL_FRAMES; ii++)
          {
 //            printf("jj+ii = %d\n", jj+ii);
             if(false == read_input_from_file(jj+ii, num_pixels, header_len,
@@ -457,29 +458,34 @@ int main(int argc, char *argv[])
          frame_times[jj] = calc_time_diff();
 /***************** End of core computation **************/
          
-      for(ii=0; ii < NUM_FRAMES; ii++)
-      {
-         bool tmpval;
+         for(ii=0; ii < NUM_SIMUL_FRAMES; ii++)
+         {
+            bool tmpval;
 #ifdef USE_CUDA
-         tmpval = write_output_to_file(jj+ii, num_pixels, header_len,
-                                       h_R[ii], h_G[ii], h_B[ii]);
+            tmpval = write_output_to_file(jj+ii, num_pixels, header_len,
+                                          h_R[ii], h_G[ii], h_B[ii]);
 #else
-         tmpval = write_output_to_file(jj+ii, num_pixels, header_len,
-                                       d_R[ii], d_G[ii], d_B[ii]);
+            tmpval = write_output_to_file(jj+ii, num_pixels, header_len,
+                                          d_R[ii], d_G[ii], d_B[ii]);
 #endif
          
-         if(false == tmpval)
-         {
-            exit(-1);
+            if(false == tmpval)
+            {
+               exit(-1);
+            }
          }
-      }
       
-   } // Loop through sequence of images
+      } // Loop through sequence of images
 
-   print_time_stats(jj);
-   
-   FREE_MEM;
+      //Note: If you make the above more intelligent such that 
+      //if you fail some file open or close, you don't exit 
+      //but instead break the outer for loop, we can still 
+      //compute the time it took based on the count jj. For 
+      //now though, I am keeping this simple...
+      print_time_stats(seq_count);
+      
+      FREE_MEM;
    }
-
+   
    return 0;
 }
