@@ -23,10 +23,10 @@ ROOTDIR := ~/NVIDIA_GPU_Computing_SDK/C/common
 # Rules and targets                                                                                        
 include ~/NVIDIA_GPU_Computing_SDK/C/common/common.mk
 
+#CPPFLAGS = -O2 -g -Wall -Werror
+
 cleanall:
 	rm -rf blacknwhite obj release *~ core.*
-
-#CPPFLAGS = -O0 -g -Wall -Werror
 
 #.PHONY: clean imgclean
 
