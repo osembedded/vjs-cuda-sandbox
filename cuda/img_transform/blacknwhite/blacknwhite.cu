@@ -11,9 +11,21 @@
 
 // Turn this switch on if you want to 
 // use cuda based acceleration...
-//#define USE_CUDA
+#define USE_CUDA
 
-//#warning Testing Werror...
+// Turn this switch on if you want to 
+// process more than 1 image at a time
+// by copying all of the pixels to 
+// the GPU in a single shot and having 
+// CUDA process it and copy all of them
+// back in a single shot. The number of 
+// images processed simultaneously is 
+// governed by the macro NUM_FRAMES
+//#define MULTI_FRAMES
+
+#ifdef MULTI_FRAMES
+#define NUM_FRAMES (2)
+#endif
 
 // PPM Edge Enhancement Code
 UINT8 *header;
@@ -70,6 +82,10 @@ UINT8 *frame_times;
 static char infile_pattern[128];
 static char outfile_pattern[128];
 
+/* Function prototypes */
+bool open_output_file(int num, int* fdout);
+bool open_input_file(int num, int* fdin);
+
 void save_ppm_header (int fd, int header_len)
 {
    int bytesRead = 0;
@@ -120,32 +136,41 @@ bool interleave_components(UINT8 *ofile, int num_pix,
    return retval;
 }
 
-void write_output_to_file(int fdout, int num_pixels, int header_len,
+bool write_output_to_file(int file_num, int num_pixels, int header_len,
                           UINT8 *RR, UINT8 *GG, UINT8 *BB)
 {
-   if( -1 == fdout )
+   bool retval = false;
+   int fdout = -1;
+
+   if( false == open_output_file(file_num, &fdout))
    {
-      printf("Invalid File pointer passed in! Exiting!\n");
-      exit (-1);
+      printf("Could not open output file!!\n");
+   }
+   else if( NULL == RR ||
+            NULL == GG ||
+            NULL == BB )
+   {
+      printf("NULL parameters passed in!\n");
+   }
+   else
+   {
+      write(fdout, (void *)header, header_len);
+      
+      if( true == interleave_components(outfile, num_pixels, 
+                                        RR, GG, BB))
+      {
+         write(fdout, (void *)outfile, num_pixels*3);
+      }
+
+      retval = true;
    }
 
-   if( NULL == RR ||
-       NULL == GG ||
-       NULL == BB )
-   {
-      printf("NULL parameters passed in! exiting!\n");
-      exit (-1);
-   }
+   if(fdout)
+      close(fdout);
 
-   write(fdout, (void *)header, header_len);
-   
-   if( true == interleave_components(outfile, num_pixels, 
-                                     RR, GG, BB))
-   {
-      write(fdout, (void *)outfile, num_pixels*3);
-   }
+   return retval;
 }
-
+  
 bool separate_components (UINT8 *ifile, int num_pix, 
                           UINT8 *RR, UINT8 *GG, UINT8 *BB)
 {
@@ -170,50 +195,72 @@ bool separate_components (UINT8 *ifile, int num_pix,
    return retval;
 }
 
-void read_input_from_file(int fdin, int num_pixels, int header_len,
+bool read_input_from_file(int file_num, int num_pixels, int header_len,
                           UINT8 *RR, UINT8 *GG, UINT8 *BB)
 {
-   if( -1 == fdin )
-   {
-      printf("Invalid File pointer passed in! Exiting!\n");
-      exit (-1);
-   }
+   bool retval = false;
+   int fdin = -1;
 
-   if( NULL == RR ||
-       NULL == GG ||
-       NULL == BB )
+   if( false == open_input_file(file_num, &fdin))
+   {
+      printf("open input file failed! bailing out!\n");
+   }
+   else if( NULL == RR ||
+            NULL == GG ||
+            NULL == BB )
    {
       printf("NULL parameters passed in! exiting!\n");
-      exit (-1);
+   }
+   else
+   {
+      save_ppm_header(fdin, header_len);
+      
+      read(fdin, (void *)infile, num_pixels*3);
+      
+      separate_components(infile, num_pixels, 
+                          RR, GG, BB);
+
+      retval = true;
    }
 
-   save_ppm_header(fdin, header_len);
+   if(-1 != fdin)
+      close(fdin);
 
-   read(fdin, (void *)infile, num_pixels*3);
-
-   separate_components(infile, num_pixels, 
-                       RR, GG, BB);
+   return retval;
 }
 
-bool open_files(int num, int* fdin, int* fdout)
+bool open_input_file(int num, int* fdin)
 {
-   char in_file[256], out_file[256];
+   char in_file[256];
 
-   if(NULL == fdin ||
-      NULL == fdout)
+   if(NULL == fdin)
    {
-      printf("Null parameters passed in in open_files!\n");
+      printf("Null parameter passed in open_files!\n");
       return false;
    }
 
    snprintf((char *)&in_file[0], 256, infile_pattern, num);
-   snprintf((char *)&out_file[0], 256, outfile_pattern, num);
    
    if((*fdin = open((const char*)&in_file[0], O_RDONLY, 0644)) < 0)
    {
       printf("Error opening %s\n", in_file);
       return false;
    }
+
+   return true;
+}
+
+bool open_output_file(int num, int* fdout)
+{
+   char out_file[256];
+
+   if(NULL == fdout)
+   {
+      printf("Null parameter passed in open_files!\n");
+      return false;
+   }
+
+   snprintf((char *)&out_file[0], 256, outfile_pattern, num);
    
    if((*fdout = open((const char*)&out_file[0], (O_RDWR | O_CREAT), 0666)) < 0)
    {
@@ -317,7 +364,6 @@ void print_time_stats(int num_frames)
 #define NUM_ARGS (8)
 int main(int argc, char *argv[])
 {
-   int fdin, fdout;
    int height = 0;
    int width = 0;
    int num_pixels = 0;
@@ -383,13 +429,7 @@ int main(int argc, char *argv[])
 
    for(jj=seq_start_num; jj<(seq_start_num + seq_count); jj++)
    {
-      if( false == open_files(jj, &fdin, &fdout))
-      {
-         printf("open files failed! bailing out!\n");
-         break;
-      }
-
-      read_input_from_file(fdin, num_pixels, header_len,
+      read_input_from_file(jj, num_pixels, header_len,
                            h_R, h_G, h_B);
 
 /***************** Start of  core computation **************/
@@ -403,15 +443,12 @@ int main(int argc, char *argv[])
 /***************** End of core computation **************/
 
 #ifdef USE_CUDA
-      write_output_to_file(fdout, num_pixels, header_len,
+      write_output_to_file(jj, num_pixels, header_len,
                            h_R, h_G, h_B);
 #else
-      write_output_to_file(fdout, num_pixels, header_len,
+      write_output_to_file(jj, num_pixels, header_len,
                            d_R, d_G, d_B);
 #endif
-
-      close(fdin);
-      close(fdout);
 
    } // Loop through sequence of images
 
