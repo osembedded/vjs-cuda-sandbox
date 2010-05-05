@@ -11,30 +11,18 @@
 
 // Turn this switch on if you want to 
 // use cuda based acceleration...
-#define USE_CUDA
+//#define USE_CUDA
 
-// Turn this switch on if you want to 
-// process more than 1 image at a time
-// by copying all of the pixels to 
-// the GPU in a single shot and having 
-// CUDA process it and copy all of them
-// back in a single shot. The number of 
-// images processed simultaneously is 
-// governed by the macro NUM_FRAMES
-//#define MULTI_FRAMES
-
-#ifdef MULTI_FRAMES
-#define NUM_FRAMES (2)
-#endif
+#define NUM_FRAMES (1)
 
 // PPM Edge Enhancement Code
 UINT8 *header;
-UINT8 *h_R;
-UINT8 *h_G;
-UINT8 *h_B;
-UINT8 *d_R;
-UINT8 *d_G;
-UINT8 *d_B;
+UINT8 *h_R[NUM_FRAMES];
+UINT8 *h_G[NUM_FRAMES];
+UINT8 *h_B[NUM_FRAMES];
+UINT8 *d_R[NUM_FRAMES];
+UINT8 *d_G[NUM_FRAMES];
+UINT8 *d_B[NUM_FRAMES];
 UINT8 *infile;
 UINT8 *outfile;
 UINT8 *frame_times;
@@ -52,28 +40,34 @@ UINT8 *frame_times;
     NULL != frame_times)
 
 #ifdef USE_CUDA
-#define FREE_MEM                                      \
-   free(header);                                      \
-   free(h_R);                                         \
-   free(h_G);                                         \
-   free(h_B);                                         \
-   cudaFree(d_R);                                     \
-   cudaFree(d_G);                                     \
-   cudaFree(d_B);                                     \
-   free(infile);                                      \
-   free(outfile);                                     \
+#define FREE_MEM                                              \
+   free(header);                                              \
+   for(int xx=0; xx< NUM_FRAMES; xx++)                        \
+   {                                                          \
+      free(h_R[xx]);                                          \
+      free(h_G[xx]);                                          \
+      free(h_B[xx]);                                          \
+      cudaFree(d_R[xx]);                                      \
+      cudaFree(d_G[xx]);                                      \
+      cudaFree(d_B[xx]);                                      \
+   }                                                          \
+   free(infile);                                              \
+   free(outfile);                                             \
    free(frame_times);
 #else
-#define FREE_MEM                                      \
-   free(header);                                      \
-   free(h_R);                                         \
-   free(h_G);                                         \
-   free(h_B);                                         \
-   free(d_R);                                         \
-   free(d_G);                                         \
-   free(d_B);                                         \
-   free(infile);                                      \
-   free(outfile);                                     \
+#define FREE_MEM                                              \
+   free(header);                                              \
+   for(int xx=0; xx< NUM_FRAMES; xx++)                        \
+   {                                                          \
+      free(h_R[xx]);                                          \
+      free(h_G[xx]);                                          \
+      free(h_B[xx]);                                          \
+      free(d_R[xx]);                                          \
+      free(d_G[xx]);                                          \
+      free(d_B[xx]);                                          \
+   }                                                          \
+   free(infile);                                              \
+   free(outfile);                                             \
    free(frame_times);
 #endif // USE_CUDA
 
@@ -184,9 +178,9 @@ bool separate_components (UINT8 *ifile, int num_pix,
    {
       for(ii = 0; ii < num_pix; ii++)
       {
-         h_R[ii] = ifile[jj++];
-         h_G[ii] = ifile[jj++];
-         h_B[ii] = ifile[jj++];         
+         RR[ii] = ifile[jj++];
+         GG[ii] = ifile[jj++];
+         BB[ii] = ifile[jj++];         
       }
 
       retval = true;
@@ -240,6 +234,8 @@ bool open_input_file(int num, int* fdin)
    }
 
    snprintf((char *)&in_file[0], 256, infile_pattern, num);
+
+//   printf("Processing File %s\n", in_file);
    
    if((*fdin = open((const char*)&in_file[0], O_RDONLY, 0644)) < 0)
    {
@@ -287,50 +283,58 @@ __global__ void cudaKernel (UINT8 *RR, UINT8 *GG, UINT8 *BB,
    }
 }
 
-void transform_pixels (UINT8 *h_RR, UINT8 *h_GG, UINT8 *h_BB,
-                       UINT8 *d_RR, UINT8 *d_GG, UINT8 *d_BB,
+void transform_pixels (UINT8 **h_RR, UINT8 **h_GG, UINT8 **h_BB,
+                       UINT8 **d_RR, UINT8 **d_GG, UINT8 **d_BB,
                        int NN)
 
 {
    int block_size = 512;
    dim3 dimBlock(block_size);
    dim3 dimGrid(NN/block_size);
+   int ii = 0;
 
 //   printf("block Size = %d, NN = %d\n", block_size, NN);
 //   printf("Grid Size = %d\n",NN/block_size);
+   
+   for(ii=0; ii< NUM_FRAMES; ii++)
+   {
+      cudaMemcpy(d_RR[ii], h_RR[ii], NN, cudaMemcpyHostToDevice);
+      cudaMemcpy(d_GG[ii], h_GG[ii], NN, cudaMemcpyHostToDevice);
+      cudaMemcpy(d_BB[ii], h_BB[ii], NN, cudaMemcpyHostToDevice);
 
-   cudaMemcpy(d_RR, h_RR, NN, cudaMemcpyHostToDevice);
-   cudaMemcpy(d_GG, h_GG, NN, cudaMemcpyHostToDevice);
-   cudaMemcpy(d_BB, h_BB, NN, cudaMemcpyHostToDevice);
-
-   cudaKernel<<<dimGrid, dimBlock>>>(d_RR, d_GG, d_BB, NN);
-   cudaThreadSynchronize();
-
-   cudaMemcpy(h_RR, d_RR, NN, cudaMemcpyDeviceToHost);
-   cudaMemcpy(h_GG, d_GG, NN, cudaMemcpyDeviceToHost);
-   cudaMemcpy(h_BB, d_BB, NN, cudaMemcpyDeviceToHost);
+      cudaKernel<<<dimGrid, dimBlock>>>(d_RR[ii], d_GG[ii], d_BB[ii], NN);
+      cudaThreadSynchronize();
+      
+      cudaMemcpy(h_RR[ii], d_RR[ii], NN, cudaMemcpyDeviceToHost);
+      cudaMemcpy(h_GG[ii], d_GG[ii], NN, cudaMemcpyDeviceToHost);
+      cudaMemcpy(h_BB[ii], d_BB[ii], NN, cudaMemcpyDeviceToHost);
+   }
 }
 
 #else
 
-void convert_to_grayscale (UINT8 *Rin, UINT8 *Gin, UINT8 *Bin,
-                           UINT8 *Rout, UINT8 *Gout, UINT8 *Bout,
+void convert_to_grayscale (UINT8 **Rin, UINT8 **Gin, UINT8 **Bin,
+                           UINT8 **Rout, UINT8 **Gout, UINT8 **Bout,
                            int NN)
 {
    int ii = 0;
+   int jj = 0;
 
-   // Read RGB data
-   for(ii = 0; ii < NN; ii++)
+   for(jj=0; jj < NUM_FRAMES; jj++)
    {
-      // Source: Wikipedia - http://en.wikipedia.org/wiki/Grayscale
-      Rout[ii]=( 0.30 * Rin[ii] ) + ( 0.59 * Gin[ii] ) + ( 0.11 * Bin[ii] );
-      Gout[ii]=Rout[ii];
-      Bout[ii]=Rout[ii];
+      // Read RGB data
+      for(ii = 0; ii < NN; ii++)
+      {
+         // Source: Wikipedia - http://en.wikipedia.org/wiki/Grayscale
+         Rout[jj][ii]=( 0.30 * Rin[jj][ii] ) + ( 0.59 * Gin[jj][ii] ) + ( 0.11 * Bin[jj][ii] );
+         Gout[jj][ii]=Rout[jj][ii];
+         Bout[jj][ii]=Rout[jj][ii];
+      }
    }
 }
 
-void transform_pixels (UINT8 *Rin, UINT8 *Gin, UINT8 *Bin,
-                       UINT8 *Rout, UINT8 *Gout, UINT8 *Bout,
+void transform_pixels (UINT8 **Rin, UINT8 **Gin, UINT8 **Bin,
+                       UINT8 **Rout, UINT8 **Gout, UINT8 **Bout,
                        int NN)
 {
    convert_to_grayscale(Rin, Gin, Bin,
@@ -371,6 +375,7 @@ int main(int argc, char *argv[])
    int seq_start_num = 0;
    int seq_count = 0;
    int jj = 0;
+   int ii = 0;
 
    // Estimate CPU clock rate
    estimate_clk_rate();
@@ -395,66 +400,86 @@ int main(int argc, char *argv[])
 
       // Allocate memory for holding the pixels...
       header = (UINT8 *) malloc(header_len);
-      h_R = (UINT8 *) malloc(num_pixels);
-      h_G = (UINT8 *) malloc(num_pixels);
-      h_B = (UINT8 *) malloc(num_pixels);
 
-#ifdef USE_CUDA
-      cudaMalloc((void **) &d_R, num_pixels);
-      cudaMalloc((void **) &d_G, num_pixels);
-      cudaMalloc((void **) &d_B, num_pixels);
-#else
-      // Note: Even though these are named 'd_' for device memory,
-      // In the case of NON CUDA code, we allocate them from the host.
-      d_R = (UINT8 *) malloc(num_pixels);
-      d_G = (UINT8 *) malloc(num_pixels);
-      d_B = (UINT8 *) malloc(num_pixels);
-#endif
-
-      outfile = (UINT8 *) malloc(header_len + num_pixels*3);
-      infile = (UINT8 *) malloc(header_len + num_pixels*3);
-
-      // Allocate memory for computation.
-      frame_times = (UINT8 *) malloc(seq_count);
-
-      if(true != PARAMS_GOOD)
+      for(ii = 0; ii < NUM_FRAMES; ii++)
       {
-         printf("Could not allocate the required memory!\n");
-         exit(-1);
-      }
-
-      strncpy(infile_pattern, argv[1], sizeof(infile_pattern));
-      strncpy(outfile_pattern, argv[5], sizeof(outfile_pattern));
-   }
-
-   for(jj=seq_start_num; jj<(seq_start_num + seq_count); jj++)
-   {
-      read_input_from_file(jj, num_pixels, header_len,
-                           h_R, h_G, h_B);
-
-/***************** Start of  core computation **************/
-      save_start_time();
-      transform_pixels(h_R, h_G, h_B,
-                       d_R, d_G, d_B,
-                       num_pixels);
-
-      save_stop_time();
-      frame_times[jj] = calc_time_diff();
-/***************** End of core computation **************/
+         h_R[ii] = (UINT8 *) malloc(num_pixels);
+         h_G[ii] = (UINT8 *) malloc(num_pixels);
+         h_B[ii] = (UINT8 *) malloc(num_pixels);
 
 #ifdef USE_CUDA
-      write_output_to_file(jj, num_pixels, header_len,
-                           h_R, h_G, h_B);
+         cudaMalloc((void **) &d_R[ii], num_pixels);
+         cudaMalloc((void **) &d_G[ii], num_pixels);
+         cudaMalloc((void **) &d_B[ii], num_pixels);
 #else
-      write_output_to_file(jj, num_pixels, header_len,
-                           d_R, d_G, d_B);
-#endif
+         // Note: Even though these are named 'd_' for device memory,
+         // In the case of NON CUDA code, we allocate them from the host.
+         d_R[ii] = (UINT8 *) malloc(num_pixels);
+         d_G[ii] = (UINT8 *) malloc(num_pixels);
+         d_B[ii] = (UINT8 *) malloc(num_pixels);
+#endif // USE_CUDA
 
+         outfile = (UINT8 *) malloc(header_len + num_pixels*3);
+         infile = (UINT8 *) malloc(header_len + num_pixels*3);
+         
+         // Allocate memory for computation.
+         frame_times = (UINT8 *) malloc(seq_count);
+         
+         if(true != PARAMS_GOOD)
+         {
+            printf("Could not allocate the required memory!\n");
+            exit(-1);
+         }
+         
+         strncpy(infile_pattern, argv[1], sizeof(infile_pattern));
+         strncpy(outfile_pattern, argv[5], sizeof(outfile_pattern));
+      }
+      
+      for(jj=seq_start_num; jj<(seq_start_num + seq_count); jj=jj+NUM_FRAMES)
+      {
+         for(ii=0; ii < NUM_FRAMES; ii++)
+         {
+//            printf("jj+ii = %d\n", jj+ii);
+            if(false == read_input_from_file(jj+ii, num_pixels, header_len,
+                                             h_R[ii], h_G[ii], h_B[ii]))
+            {
+               exit (-1);
+            }
+         }
+         
+/***************** Start of  core computation **************/
+         save_start_time();
+         transform_pixels(h_R, h_G, h_B,
+                          d_R, d_G, d_B,
+                          num_pixels);
+         
+         save_stop_time();
+         frame_times[jj] = calc_time_diff();
+/***************** End of core computation **************/
+         
+      for(ii=0; ii < NUM_FRAMES; ii++)
+      {
+         bool tmpval;
+#ifdef USE_CUDA
+         tmpval = write_output_to_file(jj+ii, num_pixels, header_len,
+                                       h_R[ii], h_G[ii], h_B[ii]);
+#else
+         tmpval = write_output_to_file(jj+ii, num_pixels, header_len,
+                                       d_R[ii], d_G[ii], d_B[ii]);
+#endif
+         
+         if(false == tmpval)
+         {
+            exit(-1);
+         }
+      }
+      
    } // Loop through sequence of images
 
    print_time_stats(jj);
-
+   
    FREE_MEM;
+   }
 
    return 0;
 }
