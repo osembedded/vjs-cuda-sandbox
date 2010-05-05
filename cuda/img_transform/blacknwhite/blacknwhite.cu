@@ -11,7 +11,9 @@
 
 // Turn this switch on if you want to 
 // use cuda based acceleration...
-#define USE_CUDA
+//#define USE_CUDA
+
+//#warning Testing Werror...
 
 // PPM Edge Enhancement Code
 UINT8 *header;
